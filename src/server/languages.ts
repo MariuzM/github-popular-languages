@@ -45,8 +45,12 @@ const cacheFile = async () => {
   return path.join(process.cwd(), '.cache', 'languages.json')
 }
 
-const isFresh = (result: LanguagesResult) =>
-  Date.now() - new Date(result.fetchedAt).getTime() < CACHE_TTL_MS
+const RATE_LIMITED_TTL_MS = 5 * 60 * 1000
+
+const isFresh = (result: LanguagesResult) => {
+  const ttl = result.rateLimited ? RATE_LIMITED_TTL_MS : CACHE_TTL_MS
+  return Date.now() - new Date(result.fetchedAt).getTime() < ttl
+}
 
 const readDiskCache = async (): Promise<LanguagesResult | null> => {
   try {
@@ -76,24 +80,37 @@ const seedKnownCounts = (result: LanguagesResult) => {
   }
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
 const fetchRepoCount = async (language: string, token: string | undefined) => {
   const q = encodeURIComponent(`language:${language}`)
   const url = `https://api.github.com/search/repositories?q=${q}&per_page=1`
 
-  const res = await fetch(url, {
-    headers: {
-      Accept: 'application/vnd.github+json',
-      'User-Agent': 'github-popular-languages',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-  })
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const res = await fetch(url, {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'github-popular-languages',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    })
 
-  if (!res.ok) {
+    if (res.ok) {
+      const data = (await res.json()) as { total_count?: number }
+      return { count: data.total_count ?? 0, ok: true }
+    }
+
+    const retryable = res.status === 403 || res.status === 429
+    if (retryable && attempt === 0) {
+      const retryAfter = Number(res.headers.get('retry-after'))
+      await sleep(Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(retryAfter, 2) * 1000 : 900)
+      continue
+    }
+
     return { count: 0, ok: false }
   }
 
-  const data = (await res.json()) as { total_count?: number }
-  return { count: data.total_count ?? 0, ok: true }
+  return { count: 0, ok: false }
 }
 
 const buildResult = async (): Promise<LanguagesResult> => {
@@ -101,21 +118,22 @@ const buildResult = async (): Promise<LanguagesResult> => {
 
   let rateLimited = false
 
-  const stats = await Promise.all(
-    LANGUAGES.map(async (language) => {
-      const { count, ok } = await fetchRepoCount(language.name, token)
-      if (!ok) {
-        rateLimited = true
-      } else {
-        knownCounts.set(language.name, count)
-      }
-      return {
-        name: language.name,
-        color: language.color,
-        repoCount: knownCounts.get(language.name) ?? 0,
-      }
-    }),
-  )
+  const stats: { name: string; color: string; repoCount: number }[] = []
+
+  for (const language of LANGUAGES) {
+    const { count, ok } = await fetchRepoCount(language.name, token)
+    if (!ok) {
+      rateLimited = true
+    } else {
+      knownCounts.set(language.name, count)
+    }
+    stats.push({
+      name: language.name,
+      color: language.color,
+      repoCount: knownCounts.get(language.name) ?? 0,
+    })
+    await sleep(300)
+  }
 
   const totalRepos = stats.reduce((sum, s) => sum + s.repoCount, 0)
 
@@ -151,10 +169,6 @@ export const getLanguages = createServerFn({ method: 'GET' }).handler(
     }
 
     const result = await buildResult()
-
-    if (result.rateLimited && !disk) {
-      return result
-    }
 
     memoryCache = result
     await writeDiskCache(result)

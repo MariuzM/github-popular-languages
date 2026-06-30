@@ -18,7 +18,10 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       tanstackStart(),
-      nitroV2Plugin({ compatibilityDate: "2026-06-30" }),
+      nitroV2Plugin({
+        compatibilityDate: "2026-06-30",
+        vercel: { functions: { maxDuration: 60 } },
+      }),
       viteReact(),
     ],
   };
