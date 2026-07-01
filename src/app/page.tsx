@@ -1,16 +1,12 @@
-import { createFileRoute } from '@tanstack/react-router'
-
 import { getLanguages } from '~/server/languages'
 
-export const Route = createFileRoute('/')({
-  loader: () => getLanguages(),
-  component: Home,
-})
+export const dynamic = 'force-dynamic'
+export const maxDuration = 60
 
 const numberFormatter = new Intl.NumberFormat('en-US')
 
-function Home() {
-  const data = Route.useLoaderData()
+const Home = async () => {
+  const data = await getLanguages()
 
   const topCount = data.languages[0]?.repoCount ?? 0
   const leaderName = data.languages[0]?.name ?? '—'
@@ -83,3 +79,5 @@ function Home() {
     </main>
   )
 }
+
+export default Home

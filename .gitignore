@@ -3,11 +3,7 @@
 .cache
 .env
 .env*
-.nitro
-.output
-.tanstack
+.next
+next-env.d.ts
 .vercel
-.vinxi
-dist
 node_modules
-src/routeTree.gen.ts

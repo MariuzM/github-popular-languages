@@ -1,5 +1,3 @@
-import { createServerFn } from '@tanstack/react-start'
-
 export type LanguageStat = {
   name: string
   color: string
@@ -152,26 +150,24 @@ const buildResult = async (): Promise<LanguagesResult> => {
   }
 }
 
-export const getLanguages = createServerFn({ method: 'GET' }).handler(
-  async (): Promise<LanguagesResult> => {
-    if (memoryCache && isFresh(memoryCache)) {
-      return memoryCache
-    }
+export const getLanguages = async (): Promise<LanguagesResult> => {
+  if (memoryCache && isFresh(memoryCache)) {
+    return memoryCache
+  }
 
-    const disk = await readDiskCache()
-    if (disk && isFresh(disk)) {
-      memoryCache = disk
-      return disk
-    }
+  const disk = await readDiskCache()
+  if (disk && isFresh(disk)) {
+    memoryCache = disk
+    return disk
+  }
 
-    if (disk) {
-      seedKnownCounts(disk)
-    }
+  if (disk) {
+    seedKnownCounts(disk)
+  }
 
-    const result = await buildResult()
+  const result = await buildResult()
 
-    memoryCache = result
-    await writeDiskCache(result)
-    return result
-  },
-)
+  memoryCache = result
+  await writeDiskCache(result)
+  return result
+}

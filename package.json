@@ -1,27 +1,28 @@
 {
   "name": "github-popular-languages",
   "private": true,
-  "type": "module",
   "scripts": {
-    "dev": "vite dev --port 3000",
-    "build": "vite build",
-    "start": "node .output/server/index.mjs",
-    "lint": "eslint \"src/**/*.{ts,tsx}\"",
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start --port 3000",
+    "lint": "eslint",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@tanstack/react-router": "^1.170.0",
-    "@tanstack/react-start": "^1.168.0",
+    "next": "^16.2.9",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
-    "@tanstack/nitro-v2-vite-plugin": "^1.155.0",
+    "@eslint/eslintrc": "^3.0.0",
     "@types/node": "^26.0.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.3",
-    "typescript": "^6.0.3",
-    "vite": "^8.1.1"
-  }
+    "eslint": "^9.0.0",
+    "eslint-config-next": "^16.2.9",
+    "typescript": "^6.0.3"
+  },
+  "trustedDependencies": [
+    "unrs-resolver"
+  ]
 }
