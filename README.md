@@ -9,7 +9,7 @@ GitHub by public repository count, pulled from the GitHub Search API and cached 
 - React 19
 - TypeScript 6
 - `next/font` for self-hosted Google Fonts
-- Async Server Component data fetch with an hourly disk cache
+- Async Server Component data fetch with hourly ISR and shared data caching
 
 ## Getting started
 
@@ -48,17 +48,13 @@ Add or remove languages in the `LANGUAGES` list in
 
 [src/server/languages.ts](src/server/languages.ts) queries
 `search/repositories?q=language:<lang>` for each tracked language, reads `total_count`, and
-sorts by repo count. It's called directly from the home Server Component in
-[src/app/page.tsx](src/app/page.tsx), which is marked `dynamic = 'force-dynamic'` so it
-renders per request.
+sorts by repo count. The GitHub requests run concurrently, and the combined result is stored
+in Next.js's persistent data cache for **one hour**.
 
-Results are cached to a local JSON file and only refetched when older than **one hour**, so
-most page loads (and server restarts) serve the cached data with no API call. Last-known-good
-counts are retained, so a transient rate limit never zeroes out the rankings.
-
-- Locally the cache lives at `.cache/languages.json`.
-- On Vercel it lives in the OS temp dir (the only writable location), and all cache writes
-  are wrapped so a read-only filesystem can never crash a request.
+[src/app/page.tsx](src/app/page.tsx) also uses hourly Incremental Static Regeneration (ISR).
+Vercel can therefore serve the generated page from its edge cache instead of invoking a
+function and waiting for GitHub during each visit. When the cached page expires, stale content
+continues to be served while Next.js regenerates it.
 
 ## Deploying to Vercel
 
@@ -67,11 +63,5 @@ counts are retained, so a transient rate limit never zeroes out the rankings.
 2. **Environment variables:** add `GITHUB_TOKEN` in the Vercel project settings.
 3. Deploy.
 
-### Caching caveat on serverless
-
-Vercel functions are ephemeral: the temp-dir cache persists only within a warm instance, so
-the GitHub fetch runs again on cold starts and per new instance rather than strictly once an
-hour globally. With a `GITHUB_TOKEN` (30 req/min) this stays well within rate limits. For a
-true cross-instance cache, swap the disk cache in
-[src/server/languages.ts](src/server/languages.ts) for a shared store such as Vercel KV /
-Upstash Redis.
+The cache uses Next.js's platform cache rather than a function's temporary filesystem, so it
+is shared across serverless instances on Vercel.

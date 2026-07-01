@@ -1,3 +1,5 @@
+import { unstable_cache } from 'next/cache'
+
 export type LanguageStat = {
   name: string
   color: string
@@ -29,54 +31,7 @@ const LANGUAGES: { name: string; color: string }[] = [
   { name: 'Zig', color: '#ec915c' },
 ]
 
-const CACHE_TTL_MS = 60 * 60 * 1000
-
-const knownCounts = new Map<string, number>()
-let memoryCache: LanguagesResult | null = null
-
-const cacheFile = async () => {
-  const path = await import('node:path')
-  if (process.env.VERCEL) {
-    const os = await import('node:os')
-    return path.join(os.tmpdir(), 'github-popular-languages.json')
-  }
-  return path.join(process.cwd(), '.cache', 'languages.json')
-}
-
-const RATE_LIMITED_TTL_MS = 5 * 60 * 1000
-
-const isFresh = (result: LanguagesResult) => {
-  const ttl = result.rateLimited ? RATE_LIMITED_TTL_MS : CACHE_TTL_MS
-  return Date.now() - new Date(result.fetchedAt).getTime() < ttl
-}
-
-const readDiskCache = async (): Promise<LanguagesResult | null> => {
-  try {
-    const fs = await import('node:fs/promises')
-    const raw = await fs.readFile(await cacheFile(), 'utf8')
-    return JSON.parse(raw) as LanguagesResult
-  } catch {
-    return null
-  }
-}
-
-const writeDiskCache = async (result: LanguagesResult) => {
-  try {
-    const fs = await import('node:fs/promises')
-    const path = await import('node:path')
-    const file = await cacheFile()
-    await fs.mkdir(path.dirname(file), { recursive: true })
-    await fs.writeFile(file, JSON.stringify(result, null, 2), 'utf8')
-  } catch {
-    return
-  }
-}
-
-const seedKnownCounts = (result: LanguagesResult) => {
-  for (const lang of result.languages) {
-    knownCounts.set(lang.name, lang.repoCount)
-  }
-}
+const CACHE_TTL_SECONDS = 60 * 60
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -116,22 +71,20 @@ const buildResult = async (): Promise<LanguagesResult> => {
 
   let rateLimited = false
 
-  const stats: { name: string; color: string; repoCount: number }[] = []
+  const stats = await Promise.all(
+    LANGUAGES.map(async (language) => {
+      const { count, ok } = await fetchRepoCount(language.name, token)
+      if (!ok) {
+        rateLimited = true
+      }
 
-  for (const language of LANGUAGES) {
-    const { count, ok } = await fetchRepoCount(language.name, token)
-    if (!ok) {
-      rateLimited = true
-    } else {
-      knownCounts.set(language.name, count)
-    }
-    stats.push({
-      name: language.name,
-      color: language.color,
-      repoCount: knownCounts.get(language.name) ?? 0,
-    })
-    await sleep(300)
-  }
+      return {
+        name: language.name,
+        color: language.color,
+        repoCount: count,
+      }
+    }),
+  )
 
   const totalRepos = stats.reduce((sum, s) => sum + s.repoCount, 0)
 
@@ -150,24 +103,11 @@ const buildResult = async (): Promise<LanguagesResult> => {
   }
 }
 
-export const getLanguages = async (): Promise<LanguagesResult> => {
-  if (memoryCache && isFresh(memoryCache)) {
-    return memoryCache
-  }
-
-  const disk = await readDiskCache()
-  if (disk && isFresh(disk)) {
-    memoryCache = disk
-    return disk
-  }
-
-  if (disk) {
-    seedKnownCounts(disk)
-  }
-
-  const result = await buildResult()
-
-  memoryCache = result
-  await writeDiskCache(result)
-  return result
-}
+export const getLanguages = unstable_cache(
+  buildResult,
+  ['github-popular-languages', ...LANGUAGES.map(({ name }) => name)],
+  {
+    revalidate: CACHE_TTL_SECONDS,
+    tags: ['github-popular-languages'],
+  },
+)

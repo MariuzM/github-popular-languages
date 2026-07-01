@@ -32,6 +32,39 @@ body {
   max-width: 840px;
 }
 
+.loading {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 56px 20px 80px;
+  background:
+    radial-gradient(130% 90% at 0% 0%, rgba(139, 123, 255, 0.22), transparent 58%),
+    #0b0d16;
+  background-attachment: fixed;
+}
+
+.spinner {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 3px solid rgba(139, 123, 255, 0.2);
+  border-top-color: #8b7bff;
+  animation: spinner-rotate 0.8s linear infinite;
+}
+
+@keyframes spinner-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 1.6s;
+  }
+}
+
 .badge {
   display: flex;
   align-items: center;
